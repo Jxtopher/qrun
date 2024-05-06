@@ -26,6 +26,13 @@ qrun -b /tmp/backlog
 qrun -b /tmp/backlog -j 5 -d
 ```
 
+
+* Other example of demon mode
+
+```shell
+bash -c "/usr/bin/qrun -b /var/spool/qrun -j 2 -d >/var/log/qrun.log 2>&1 &"
+```
+
 ## See also
 
 - Similare software `xjobs` (goto `man -s1 xjobs`)

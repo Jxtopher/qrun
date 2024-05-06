@@ -2,8 +2,8 @@ FROM rust:slim-buster
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-# Package installation 
-RUN apt-get update -y && \ 
+# Package installation
+RUN apt-get update -y && \
     apt-get install -y --no-install-recommends git \
     python3 \
     sudo \

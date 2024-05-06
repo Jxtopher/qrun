@@ -1,21 +1,29 @@
 pub fn split(command: String) -> Vec<String> {
-    let mut result = Vec::<String>::new();
-    result.push("".to_string());
+    let mut result = Vec::new();
+    let mut current = String::from("");
 
-    let mut is_split = true;
+    let mut in_quotes = false;
+    let mut quote_char = '\0';
 
     for character in command.chars() {
-        if character == '\'' || character == '\"' {
-            is_split = !is_split;
-            let index = result.len() - 1;
-            result[index].push_str(&character.to_string());
-        } else if character == ' ' && is_split {
-            result.push("".to_string());
+        if (character == '\'' || character == '\"') && (!in_quotes || character == quote_char) {
+            in_quotes = !in_quotes;
+            quote_char = character;
+            current.push(character);
+        } else if character == ' ' && !in_quotes {
+            if !current.is_empty() {
+                result.push(current.clone());
+                current.clear();
+            }
         } else {
-            let index = result.len() - 1;
-            result[index].push_str(&character.to_string());
+            current.push(character);
         }
     }
+
+    if !current.is_empty() {
+        result.push(current);
+    }
+
     result
 }
 
@@ -25,10 +33,10 @@ mod tests {
 
     #[test]
     fn split_test() {
-        let r = split("ls -la -h".to_string());
-        assert_eq!(r.len(), 3);
+        let r = split(String::from("ls -la -h"));
+        assert_eq!(r, vec!["ls", "-la", "-h"]);
 
-        let r = split("ls -la --env=\"VAR VAR\" -h".to_string());
-        assert_eq!(r.len(), 4);
+        let r = split(String::from("ls -la --env=\"VAR VAR\" -h"));
+        assert_eq!(r, vec!["ls", "-la", "--env=\"VAR VAR\"", "-h"]);
     }
 }
