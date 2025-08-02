@@ -1,5 +1,4 @@
 mod rw_file;
-mod splitter;
 
 use chrono::Utc;
 use clap::Parser;
@@ -28,7 +27,7 @@ struct Args {
 }
 
 fn exec(task: &str) {
-    let mut params = splitter::split(task.to_string());
+    let mut params: Vec<&str> = task.split_ascii_whitespace().collect();
     let executable = params[0].to_string();
     let start_time = Utc::now();
     params.remove(0);
@@ -91,18 +90,17 @@ fn main() -> Result<(), std::io::Error> {
             let mut found_file = false;
             for entry in fs::read_dir(&backlog_path)? {
                 let path = entry?.path();
-                if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
-                    if ext == "bl" {
-                        let start_time = Utc::now();
-                        info!(
-                            "{} -> backlog: {}",
-                            start_time.format("%Y-%m-%d %H:%M:%S%.3f%z"),
-                            path.display()
-                        );
-                        backlog_file = Some(path);
-                        found_file = true;
-                        break;
-                    }
+                let ext = path.extension().and_then(|s| s.to_str());
+                if ext == Some("bl") {
+                    let start_time = Utc::now();
+                    info!(
+                        "{} -> backlog: {}",
+                        start_time.format("%Y-%m-%d %H:%M:%S%.3f%z"),
+                        path.display()
+                    );
+                    backlog_file = Some(path);
+                    found_file = true;
+                    break;
                 }
             }
 
@@ -117,32 +115,35 @@ fn main() -> Result<(), std::io::Error> {
         }
 
         if let Some(file) = &backlog_file {
-            // Read the backlog
-            let mut tasks = rw_file::read(&file.to_string_lossy().to_string());
+            if file.exists() {
+                // Read the backlog
+                let mut tasks = rw_file::read(&file.to_string_lossy().to_string());
 
-            // Verify that the backlog file is not being edited
-            let parent = file.parent().unwrap();
-            let swapfile_filename = format!(".{}.swp", file.file_name().unwrap().to_str().unwrap());
+                // Verify that the backlog file is not being edited
+                let parent = file.parent().unwrap();
+                let swapfile_filename =
+                    format!(".{}.swp", file.file_name().unwrap().to_str().unwrap());
 
-            match metadata(parent.join(&swapfile_filename)) {
-                Ok(_) => is_locked = true,
-                Err(_) => is_locked = false,
-            }
-
-            if tasks.is_empty() {
-                // No more tasks need to be executed in the backlog
-                fs::remove_file(file)?;
-                has_tasks = false;
-                backlog_file.take();
-            } else if !is_locked && thread_pool.len() < args.jobs {
-                while thread_pool.len() < args.jobs && !tasks.is_empty() {
-                    let task = tasks[0].to_string();
-                    tasks.remove(0);
-                    println!("Executing: {}", &task);
-                    rw_file::append(history_file.to_string_lossy().as_ref(), &tasks)?;
-                    thread_pool.push(thread::spawn(move || exec(&task)));
+                match metadata(parent.join(&swapfile_filename)) {
+                    Ok(_) => is_locked = true,
+                    Err(_) => is_locked = false,
                 }
-                rw_file::write(&file.to_string_lossy().to_string(), &tasks);
+
+                if tasks.is_empty() {
+                    // No more tasks need to be executed in the backlog
+                    fs::remove_file(file)?;
+                    has_tasks = false;
+                    backlog_file.take();
+                } else if !is_locked && thread_pool.len() < args.jobs {
+                    while thread_pool.len() < args.jobs && !tasks.is_empty() {
+                        let task = tasks[0].to_string();
+                        tasks.remove(0);
+                        println!("Executing: {}", &task);
+                        rw_file::append(history_file.to_string_lossy().as_ref(), &tasks)?;
+                        thread_pool.push(thread::spawn(move || exec(&task)));
+                    }
+                    rw_file::write(&file.to_string_lossy().to_string(), &tasks)?;
+                }
             }
         }
 

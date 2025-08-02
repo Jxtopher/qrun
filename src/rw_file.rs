@@ -1,36 +1,27 @@
-use log::error;
 use std::fs::OpenOptions;
 use std::fs::{read_to_string, File};
 use std::io::{self, Write};
 
 pub fn read(filename: &String) -> Vec<String> {
-    let mut result = Vec::new();
-    for line in read_to_string(filename).unwrap().lines() {
-        result.push(line.to_string())
-    }
-    result
+    read_to_string(filename)
+        .unwrap()
+        .lines()
+        .map(|line| line.to_string())
+        .collect()
 }
 
-pub fn write(filename: &String, tasks: &[String]) {
+pub fn write(filename: &String, tasks: &[String]) -> Result<(), io::Error> {
+    let mut data_file = File::create(filename)?;
+
     if tasks.is_empty() {
-        // Write an empty file
-        let mut data_file = File::create(filename).expect("creation failed");
-        data_file.write_all(b"").expect("write failed");
+        data_file.write_all(b"")?; // Write an empty file if no tasks are provided
     } else {
-        let mut data_file = File::create(filename).expect("creation failed");
-        for i in 0..=(tasks.len() - 1) {
-            let mut line = tasks[i].to_string();
-            if i != tasks.len() - 1 {
-                line.push('\n');
-            }
-            match data_file.write(line.as_bytes()) {
-                Ok(_) => (),
-                Err(..) => {
-                    error!("Write failed");
-                }
-            }
+        for task in tasks {
+            writeln!(data_file, "{task}")?; // Use writeln! for automatic newline insertion
         }
     }
+
+    Ok(())
 }
 
 pub fn append(file_path: &str, content: &[String]) -> io::Result<()> {
@@ -44,4 +35,33 @@ pub fn append(file_path: &str, content: &[String]) -> io::Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::TempDir;
+
+    #[test]
+    fn test_write_empty() {
+        let tmpdir = TempDir::new().unwrap();
+        let filename = tmpdir.path().join("test_tasks.txt");
+        let tasks: Vec<String> = vec![];
+        write(&filename.display().to_string(), &tasks).unwrap();
+        assert!(fs::read_to_string(&filename).unwrap().is_empty());
+        fs::remove_file(&filename).unwrap();
+    }
+
+    #[test]
+    fn test_write_with_tasks() {
+        let tmpdir = TempDir::new().unwrap();
+        let filename = tmpdir.path().join("test_tasks.txt");
+        let tasks = vec!["Task 1".to_string(), "Task 2".to_string()];
+        write(&filename.display().to_string(), &tasks).unwrap();
+
+        let content = fs::read_to_string(&filename).unwrap();
+        assert_eq!(content, "Task 1\nTask 2\n");
+        fs::remove_file(&filename).unwrap();
+    }
 }
