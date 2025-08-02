@@ -1,13 +1,15 @@
 mod rw_file;
+mod thread_pool;
 
 use chrono::Utc;
 use clap::Parser;
 use log::{error, info};
 use std::fs::{self, metadata};
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
 use std::thread;
 use std::time::Duration;
+
+use crate::thread_pool::ThreadPool;
 
 /// Task manager
 #[derive(Parser, Debug)]
@@ -26,53 +28,13 @@ struct Args {
     demon: bool,
 }
 
-fn exec(task: &str) {
-    let mut params: Vec<&str> = task.split_ascii_whitespace().collect();
-    let executable = params[0].to_string();
-    let start_time = Utc::now();
-    params.remove(0);
-
-    match Command::new(executable)
-        .args(params)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()
-    {
-        Ok(output) => {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            info!(
-                "{} -> {}",
-                start_time.format("%Y-%m-%d %H:%M:%S%.3f%z"),
-                task
-            );
-            println!("{stderr}");
-            println!("{stdout}");
-        }
-        Err(e) => {
-            error!("Failed to execute command: {task}. Error: {e}");
-        }
-    }
-}
-
-fn thread_visitor(thread_pool: &mut Vec<thread::JoinHandle<()>>) {
-    let mut index = 0;
-    while index < thread_pool.len() {
-        if thread_pool[index].is_finished() {
-            thread_pool.remove(index);
-        } else {
-            index += 1;
-        }
-    }
-}
-
 fn main() -> Result<(), std::io::Error> {
     env_logger::init();
     let args = Args::parse();
 
     let mut has_tasks: bool = true;
     let mut is_locked: bool;
-    let mut thread_pool: Vec<thread::JoinHandle<()>> = Vec::new();
+    let mut thread_pool: ThreadPool = ThreadPool::new(args.jobs);
 
     let backlog_path = PathBuf::from(&args.backlog);
     let is_dir = backlog_path.is_dir();
@@ -84,7 +46,7 @@ fn main() -> Result<(), std::io::Error> {
         return Ok(());
     }
 
-    while args.demon || has_tasks || !thread_pool.is_empty() {
+    while args.demon || has_tasks || thread_pool.is_ongoing() {
         if is_dir {
             history_file = backlog_path.join("qrun_history.log");
             let mut found_file = false;
@@ -105,7 +67,8 @@ fn main() -> Result<(), std::io::Error> {
             }
 
             if !found_file {
-                thread_visitor(&mut thread_pool);
+                // thread_visitor(&mut thread_pool);
+                thread_pool.update();
                 thread::sleep(Duration::from_secs(1));
                 continue;
             }
@@ -134,20 +97,23 @@ fn main() -> Result<(), std::io::Error> {
                     fs::remove_file(file)?;
                     has_tasks = false;
                     backlog_file.take();
-                } else if !is_locked && thread_pool.len() < args.jobs {
-                    while thread_pool.len() < args.jobs && !tasks.is_empty() {
-                        let task = tasks[0].to_string();
-                        tasks.remove(0);
-                        println!("Executing: {}", &task);
-                        rw_file::append(history_file.to_string_lossy().as_ref(), &tasks)?;
-                        thread_pool.push(thread::spawn(move || exec(&task)));
+                } else if !is_locked && thread_pool.has_one_available() {
+                    while (thread_pool.has_one_available()) && (!tasks.is_empty()) {
+                        let thread_id = thread_pool.get_one_available();
+                        if let Some(thread_id) = thread_id {
+                            let task = tasks[0].to_string();
+                            tasks.remove(0);
+                            println!("{} - {}", thread_id, &task);
+                            rw_file::append(history_file.to_string_lossy().as_ref(), &tasks)?;
+                            thread_pool.exec_task(thread_id, task);
+                        }
                     }
                     rw_file::write(&file.to_string_lossy().to_string(), &tasks)?;
                 }
             }
         }
 
-        thread_visitor(&mut thread_pool);
+        thread_pool.update();
 
         thread::sleep(Duration::from_secs(1));
     }
