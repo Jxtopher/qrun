@@ -4,7 +4,7 @@ Manager task execution queues in parallel with a quenue depending on CPU/RAM loa
 
 ## Description
 
-The backlog is stored in a single file, or a directory of files if you specify a backlog directory. ⚠ Backlog entries are read from these files and can also be updated because once a task is executed, it's automatically removed from the backlog to prevent duplicate execution.
+The backlog is stored in a single file, or a directory of files if you specify a backlog directory. ⚠ Backlog entries are read from these files, the backlog file is deleted after all the tasks are executed.
 
 ## Example
 

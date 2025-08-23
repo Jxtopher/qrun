@@ -1,8 +1,9 @@
 use std::fs::OpenOptions;
 use std::fs::{read_to_string, File};
 use std::io::{self, Write};
+use std::path::PathBuf;
 
-pub fn read(filename: &String) -> Vec<String> {
+pub fn read(filename: &PathBuf) -> Vec<String> {
     read_to_string(filename)
         .unwrap()
         .lines()
@@ -10,7 +11,7 @@ pub fn read(filename: &String) -> Vec<String> {
         .collect()
 }
 
-pub fn write(filename: &String, tasks: &[String]) -> Result<(), io::Error> {
+pub fn write(filename: &PathBuf, tasks: &[String]) -> Result<(), io::Error> {
     let mut data_file = File::create(filename)?;
 
     if tasks.is_empty() {
@@ -24,15 +25,13 @@ pub fn write(filename: &String, tasks: &[String]) -> Result<(), io::Error> {
     Ok(())
 }
 
-pub fn append(file_path: &str, content: &[String]) -> io::Result<()> {
+pub fn append(filepath: &PathBuf, content: &str) -> io::Result<()> {
     let mut file = OpenOptions::new()
         .append(true)
         .create(true)
-        .open(file_path)?;
+        .open(filepath)?;
 
-    for line in content {
-        writeln!(file, "{line}")?;
-    }
+    writeln!(file, "{content}")?;
 
     Ok(())
 }
@@ -48,7 +47,7 @@ mod tests {
         let tmpdir = TempDir::new().unwrap();
         let filename = tmpdir.path().join("test_tasks.txt");
         let tasks: Vec<String> = vec![];
-        write(&filename.display().to_string(), &tasks).unwrap();
+        write(&filename, &tasks).unwrap();
         assert!(fs::read_to_string(&filename).unwrap().is_empty());
         fs::remove_file(&filename).unwrap();
     }
@@ -58,7 +57,7 @@ mod tests {
         let tmpdir = TempDir::new().unwrap();
         let filename = tmpdir.path().join("test_tasks.txt");
         let tasks = vec!["Task 1".to_string(), "Task 2".to_string()];
-        write(&filename.display().to_string(), &tasks).unwrap();
+        write(&filename, &tasks).unwrap();
 
         let content = fs::read_to_string(&filename).unwrap();
         assert_eq!(content, "Task 1\nTask 2\n");
